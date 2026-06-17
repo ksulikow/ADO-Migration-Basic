@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ADO Work Item Clone Config",
+  "type": "object",
+  "required": [
+    "source",
+    "target",
+    "query",
+    "traceability",
+    "processing",
+    "relations",
+    "attachments",
+    "dryRun"
+  ],
+  "properties": {
+    "source": {
+      "type": "object",
+      "required": ["orgUrl", "project", "patEnvVar"],
+      "properties": {
+        "orgUrl": { "type": "string", "minLength": 1 },
+        "project": { "type": "string", "minLength": 1 },
+        "patEnvVar": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "target": {
+      "type": "object",
+      "required": ["orgUrl", "project", "patEnvVar"],
+      "properties": {
+        "orgUrl": { "type": "string", "minLength": 1 },
+        "project": { "type": "string", "minLength": 1 },
+        "patEnvVar": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "query": {
+      "type": "object",
+      "required": ["wiql"],
+      "properties": {
+        "wiql": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "workItemTypes": {
+      "type": "object",
+      "properties": {
+        "includeTypes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "typeMapping": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "fieldMapping": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["targetField"],
+            "properties": {
+              "targetField": { "type": "string" },
+              "transform": {
+                "type": "string",
+                "enum": [
+                  "passthrough",
+                  "toString",
+                  "toInt",
+                  "toDouble",
+                  "toDateTime",
+                  "toLower",
+                  "toUpper"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "fieldFallback": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": ["empty", "null"],
+          "default": "empty"
+        }
+      },
+      "additionalProperties": false
+    },
+    "traceability": {
+      "type": "object",
+      "required": ["sourceReferenceField", "sourceReferenceValue"],
+      "properties": {
+        "sourceReferenceField": { "type": "string", "minLength": 1 },
+        "sourceReferenceValue": { "type": "string", "enum": ["id", "url"] }
+      },
+      "additionalProperties": false
+    },
+    "processing": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["upsert"] },
+        "continueOnError": { "type": "boolean" },
+        "failureThreshold": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "relations": {
+      "type": "object",
+      "properties": {
+        "defaultWhenMissing": { "type": "string", "enum": ["copy-original", "skip"] },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "enum": ["copy-original", "skip"] }
+        }
+      },
+      "additionalProperties": false
+    },
+    "attachments": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "dryRun": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "logging": {
+      "type": "object",
+      "properties": {
+        "throttleMs": { "type": "integer", "minimum": 0 },
+        "maxRetries": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

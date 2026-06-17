@@ -1,25 +1,38 @@
 # Azure DevOps Work Item Clone and Update Script
 
-This repository defines a PowerShell script approach to clone Azure DevOps work items between projects (or within the same project) using Azure DevOps REST APIs.
+This repository includes a PowerShell implementation to clone Azure DevOps work items between projects (or within the same project) using REST APIs.
 
-The script is designed to be safe for repeated runs:
+The script is designed for safe repeated runs:
 - First run creates cloned items.
-- Later runs can update already cloned items instead of creating duplicates.
+- Later runs update already cloned items instead of creating duplicates.
 
-## Supported capabilities
+## Implemented capabilities
 
-- Clone work items from source to target project using WIQL selection.
-- Filter by included work item types.
-- Map source work item types to target work item types.
-- Map fields through configuration.
-- Handle unmapped incompatible fields by warning and applying null or empty fallback values.
-- Preserve source traceability in a configurable custom single-line field on target work items.
-- Use traceability field for upsert behavior (create or update).
-- Rebuild links in a second pass:
-	- Remap links to cloned targets when available.
-	- Copy links to original source items when related items are not cloned.
-- Clone attachments.
-- Produce execution summary and JSON mapping/report artifacts.
+- WIQL-based source selection.
+- Include-types safety filtering.
+- Type mapping from source type to target type.
+- Field mapping with optional transforms.
+- Unmapped incompatible-field fallback policy (`empty` or `null`) with warnings.
+- Upsert mode by configurable traceability field.
+- Traceability value as source ID or source URL.
+- Two-pass processing:
+  - First pass creates or updates base work items.
+  - Second pass rebuilds relations and clones attachments.
+- Relation fallback behavior for non-cloned linked items (`copy-original` or `skip`, with per-relation overrides).
+- Retry policy for transient API failures (429/5xx) and throttle controls.
+- Dry-run validation mode (`validateOnly`) with payload validation and no target mutation persistence.
+- JSON output artifacts for mapping, summary, item outcomes, relation outcomes, and failures.
+
+## Repository layout
+
+- `clone-workitems.ps1`: main entry point.
+- `modules/ADO-API.psm1`: auth, API wrappers, retries, WIQL, batch fetch, create/update, attachments.
+- `modules/Field-Mapper.psm1`: type mapping, field mapping, compatibility checks, fallback values.
+- `modules/Link-Handler.psm1`: relation remap/copy logic and attachment cloning support.
+- `modules/Validation.psm1`: config read, schema validation, required-key checks, preflight.
+- `config/config.schema.json`: JSON schema for config contract.
+- `config/example-config.json`: sample config with mappings and behaviors.
+- `output/`: run artifacts.
 
 ## Required behavior rules
 
@@ -32,7 +45,7 @@ When field mapping is not configured and source and target fields are incompatib
 
 ### 2. Original source reference field
 
-Each cloned target work item must store reference to its original source work item in a configurable custom single-line field.
+Each cloned target work item stores a reference to its original source work item in a configurable custom single-line field.
 
 Common options:
 - Store source work item ID.
@@ -40,7 +53,7 @@ Common options:
 
 ### 3. Update processing (upsert)
 
-Before creating a new target item, the script must query target items by the configured source-reference field.
+Before creating a new target item, the script queries target items by the configured source-reference field.
 
 If match exists:
 - Update existing target item.
@@ -50,40 +63,24 @@ If no match exists:
 
 This ensures idempotent re-runs and prevents duplicate clones.
 
-## High-level flow
+## Configuration contract
 
-1. Validate config and connectivity.
-2. Run WIQL to collect source IDs.
-3. Retrieve source items in batch with fields and relations.
-4. For each source item:
-	 - Resolve mapped target type.
-	 - Build field patch payload.
-	 - Set source-reference custom field.
-	 - Upsert by source-reference field lookup.
-5. Second pass:
-	 - Rebuild/remap work item links.
-	 - Clone attachments.
-6. Emit reports and logs.
+Use one JSON config file validated by `config/config.schema.json`.
 
-## Configuration model
-
-Use a single JSON file.
-
-Minimum expected sections:
-- source: org, project, auth reference.
-- target: org, project, auth reference.
-- query: WIQL.
-- workItemTypes: includeTypes.
-- typeMapping: source to target work item type.
-- fieldMapping: field mapping rules and fallback policy.
-- traceability:
-	- sourceReferenceField: target custom single-line field reference name.
-	- sourceReferenceValue: id or url.
-- processing:
-	- mode: upsert.
-- relations: remap/copy-original/skip behavior.
-- attachments: enabled true or false.
-- dryRun: enabled true or false.
+Main sections:
+- `source`: `orgUrl`, `project`, `patEnvVar`
+- `target`: `orgUrl`, `project`, `patEnvVar`
+- `query`: `wiql`
+- `workItemTypes`: `includeTypes`
+- `typeMapping`
+- `fieldMapping`
+- `fieldFallback`: `policy` (`empty` or `null`)
+- `traceability`: `sourceReferenceField`, `sourceReferenceValue` (`id` or `url`)
+- `processing`: `mode` (`upsert`), optional thresholds
+- `relations`: fallback and per-relation overrides
+- `attachments`: `enabled`
+- `dryRun`: `enabled`
+- `logging`: `throttleMs`, `maxRetries`
 
 ## Authentication
 
@@ -95,31 +92,68 @@ Recommended:
 
 Do not hardcode PAT secrets in committed files.
 
+## Run
+
+1. Set PAT environment variables.
+
+PowerShell example:
+
+```powershell
+$env:ADO_SOURCE_PAT = "<source-pat>"
+$env:ADO_TARGET_PAT = "<target-pat>"
+```
+
+2. Edit `config/example-config.json` for your org/project, WIQL, mappings, and behaviors.
+
+3. Dry-run first:
+
+```powershell
+.\clone-workitems.ps1 -ConfigPath .\config\example-config.json -DryRun
+```
+
+4. Live run:
+
+```powershell
+.\clone-workitems.ps1 -ConfigPath .\config\example-config.json -ContinueOnError -FailureThreshold 10
+```
+
+## Processing flow
+
+1. Validate config against JSON schema.
+2. Run startup preflight checks (required keys, PAT env vars, source/target reachability).
+3. Execute WIQL and apply `includeTypes` filter.
+4. Retrieve source items in batches of 200 with fields and relations.
+5. First pass upsert:
+	- Resolve target type.
+	- Build field patch using mappings and fallback policy.
+	- Set traceability field.
+	- Update existing target item by traceability lookup, else create.
+	- Persist incremental source-to-target mapping (except dry-run).
+6. Second pass (non-dry-run):
+	- Rebuild relations with remap or fallback behavior.
+	- Clone attachments and add new `AttachedFile` relations.
+7. Emit run artifacts and summary.
+
 ## API endpoints used
 
 Core Azure DevOps WIT REST APIs:
-- POST wiql
-- POST workitemsbatch
-- POST workitems/{type}
-- PATCH workitems/{id}
-
-Plus relation and attachment endpoints as needed.
+- `POST wiql`
+- `POST workitemsbatch`
+- `POST workitems/{type}`
+- `PATCH workitems/{id}`
+- `GET workitems/{id}`
+- `POST attachments`
 
 ## Logging and outputs
 
-The script should emit:
-- Console summary:
-	- selected count
-	- created count
-	- updated count
-	- skipped count
-	- warning count
-	- error count
-- JSON artifacts:
-	- source-to-target mapping
-	- per-item create or update action
-	- relation actions
-	- warnings and errors
+Console summary includes selected, processed, created, updated, skipped, warnings, errors, and dry-run flag.
+
+JSON artifacts are written to `output/`:
+- `run-summary.json`
+- `id-mapping.json` (non-dry-run)
+- `item-results.json`
+- `relation-results.json`
+- `failures.json`
 
 ## Validation checklist
 
@@ -137,6 +171,8 @@ After run:
 - Confirm relation remap and copy-original logic.
 - Confirm attachments cloned as expected.
 
-## Repository status
+## Known limitations (v1)
 
-This repository currently documents behavior and implementation plan. Script and module files can now be implemented according to this README contract.
+- No advanced identity/user remapping tables.
+- No automatic process-template reconciliation.
+- Report output is JSON only (no HTML/CSV formatter).

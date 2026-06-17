@@ -1,0 +1,66 @@
+{
+  "source": {
+    "orgUrl": "https://dev.azure.com/your-source-org",
+    "project": "SourceProject",
+    "patEnvVar": "ADO_SOURCE_PAT"
+  },
+  "target": {
+    "orgUrl": "https://dev.azure.com/your-target-org",
+    "project": "TargetProject",
+    "patEnvVar": "ADO_TARGET_PAT"
+  },
+  "query": {
+    "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = 'SourceProject' AND [System.WorkItemType] IN ('User Story','Bug','Task') ORDER BY [System.ChangedDate] DESC"
+  },
+  "workItemTypes": {
+    "includeTypes": ["User Story", "Bug", "Task"]
+  },
+  "typeMapping": {
+    "User Story": "Product Backlog Item",
+    "Bug": "Bug",
+    "Task": "Task"
+  },
+  "fieldMapping": {
+    "System.Description": {
+      "targetField": "System.Description",
+      "transform": "passthrough"
+    },
+    "Microsoft.VSTS.Common.Priority": {
+      "targetField": "Microsoft.VSTS.Common.Priority",
+      "transform": "toInt"
+    },
+    "Custom.BusinessValue": {
+      "targetField": "Custom.BusinessValue",
+      "transform": "toString"
+    }
+  },
+  "fieldFallback": {
+    "policy": "empty"
+  },
+  "traceability": {
+    "sourceReferenceField": "Custom.SourceWorkItemRef",
+    "sourceReferenceValue": "url"
+  },
+  "processing": {
+    "mode": "upsert",
+    "continueOnError": true,
+    "failureThreshold": 10
+  },
+  "relations": {
+    "defaultWhenMissing": "copy-original",
+    "overrides": {
+      "System.LinkTypes.Dependency-Forward": "copy-original",
+      "System.LinkTypes.Remote.Related": "skip"
+    }
+  },
+  "attachments": {
+    "enabled": true
+  },
+  "dryRun": {
+    "enabled": true
+  },
+  "logging": {
+    "throttleMs": 125,
+    "maxRetries": 5
+  }
+}
