@@ -1,0 +1,1 @@
+Example of powersehll script to clone ADO work item
