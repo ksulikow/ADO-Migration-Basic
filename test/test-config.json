@@ -1,0 +1,67 @@
+{
+  "source": {
+    "orgUrl": "https://dev.azure.com/Kriss365-Dev",
+    "project": "ADO-Migration-Test",
+    "patEnvVar": "ADO_KRISS_PAT"
+  },
+  "target": {
+    "orgUrl": "https://dev.azure.com/Kriss365-Dev",
+    "project": "ADO-Migration-Test-Target",
+    "patEnvVar": "ADO_KRISS_PAT"
+  },
+  "query": {
+    "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = 'ADO-Migration-Test' AND [System.WorkItemType] IN ('Feature', 'User Story','Bug','Task') ORDER BY [System.ChangedDate] DESC"
+  },
+  "workItemTypes": {
+    "includeTypes": ["Feature", "User Story", "Bug", "Task"]
+  },
+  "typeMapping": {
+    "Feature": "Feature",
+    "User Story": "User Story",
+    "Bug": "Bug",
+    "Task": "Task"
+  },
+  "fieldMapping": {
+    "System.Description": {
+      "targetField": "System.Description",
+      "transform": "passthrough"
+    },
+    "Microsoft.VSTS.Common.Priority": {
+      "targetField": "Microsoft.VSTS.Common.Priority",
+      "transform": "toInt"
+    },
+    "Custom.BusinessValue": {
+      "targetField": "Custom.BusinessValue",
+      "transform": "toString"
+    }
+  },
+  "fieldFallback": {
+    "policy": "empty"
+  },
+  "traceability": {
+    "sourceReferenceField": "Custom.ReflectedWorkItemId",
+    "sourceReferenceValue": "url"
+  },
+  "processing": {
+    "mode": "upsert",
+    "continueOnError": true,
+    "failureThreshold": 10
+  },
+  "relations": {
+    "defaultWhenMissing": "copy-original",
+    "overrides": {
+      "System.LinkTypes.Dependency-Forward": "copy-original",
+      "System.LinkTypes.Remote.Related": "skip"
+    }
+  },
+  "attachments": {
+    "enabled": true
+  },
+  "dryRun": {
+    "enabled": false
+  },
+  "logging": {
+    "throttleMs": 125,
+    "maxRetries": 5
+  }
+}
