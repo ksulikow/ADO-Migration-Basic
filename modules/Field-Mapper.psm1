@@ -162,6 +162,10 @@ function Build-WorkItemFieldPatch {
                 if ($mappingRule.transform) {
                     $conversion = [string] $mappingRule.transform
                 }
+                if ($mappingRule.PSObject.Properties.Name -contains "replaceTo" -and $mappingRule.replaceTo.PSObject.Properties.Name -contains "$sourceVal") {
+                    $newVal = $mappingRule.replaceTo."$sourceVal"
+                    $sourceVal = $newVal
+                }
             }
         }
 

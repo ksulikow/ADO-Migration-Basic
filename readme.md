@@ -12,6 +12,7 @@ The script is designed for safe repeated runs:
 - Include-types safety filtering.
 - Type mapping from source type to target type.
 - Field mapping with optional transforms.
+- Field mapping value replacement via `replaceTo` before transform.
 - Unmapped incompatible-field fallback policy (`empty` or `null`) with warnings.
 - Upsert mode by configurable traceability field.
 - Traceability value as source ID or source URL.
@@ -102,6 +103,12 @@ The config describes where to read work items from, where to create/update clone
 		},
 		"Microsoft.VSTS.Common.Priority": {
 			"targetField": "Microsoft.VSTS.Common.Priority",
+			"replaceTo": {
+				"1": 10,
+				"2": 20,
+				"3": 30,
+				"4": 40
+			},
 			"transform": "toInt"
 		},
 		"Custom.BusinessValue": {
@@ -196,6 +203,28 @@ Supported transforms:
 - `toDateTime`
 - `toLower`
 - `toUpper`
+
+Optional value replacement map:
+
+- `replaceTo`: map source field values to new values before transform is applied.
+
+Example:
+
+```json
+"fieldMapping": {
+	"System.State": {
+		"targetField": "System.State",
+		"replaceTo": {
+			"New": "To Do",
+			"Active": "In Progress",
+			"Closed": "Done"
+		},
+		"transform": "passthrough"
+	}
+}
+```
+
+In this example, if source `System.State` is `Active`, the mapped value becomes `In Progress`.
 
 Example mapping a custom numeric source field to a string target field:
 

@@ -34,9 +34,13 @@
       "targetField": "Microsoft.VSTS.Common.Priority",
       "transform": "toInt"
     },
-    "Custom.BusinessValue": {
-      "targetField": "Custom.BusinessValue",
-      "transform": "toString"
+    "Microsoft.VSTS.Common.ValueArea": {
+      "targetField": "Microsoft.VSTS.Common.ValueArea",
+      "transform": "passthrough",
+      "replaceTo": {
+        "Architectural": "Business",
+        "Business": "Architectural"
+      }
     }
   },
   "fieldFallback": {

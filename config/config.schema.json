@@ -77,6 +77,10 @@
                   "toLower",
                   "toUpper"
                 ]
+              },
+              "replaceTo": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
               }
             },
             "additionalProperties": false
