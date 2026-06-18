@@ -76,7 +76,7 @@ function Test-CloneConfig {
 
     $config = $configRaw | ConvertFrom-Json -Depth 100
     $missing = Test-RequiredConfigKeys -Config $config
-    if ($missing.Count -gt 0) {
+    if ($missing -ne $null -and $missing.Count -gt 0) {
         throw "Missing required config keys: $($missing -join ', ')"
     }
 

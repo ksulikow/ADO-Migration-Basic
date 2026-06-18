@@ -5,8 +5,10 @@ $script:SystemManagedFields = @(
     'System.Id',
     'System.Rev',
     'System.AreaId',
+    'System.AreaPath',
     'System.NodeName',
     'System.IterationId',
+    'System.IterationPath',
     'System.ExternalLinkCount',
     'System.HyperLinkCount',
     'System.AttachedFileCount',
@@ -17,7 +19,8 @@ $script:SystemManagedFields = @(
     'System.ChangedDate',
     'System.CreatedBy',
     'System.ChangedBy',
-    'System.AuthorizedAs'
+    'System.AuthorizedAs',
+    'Microsoft.VSTS.Common.StateChangeDate'
 )
 
 function Resolve-TargetWorkItemType {
@@ -156,6 +159,10 @@ function Build-WorkItemFieldPatch {
                     $conversion = [string] $mappingRule.transform
                 }
             }
+        }
+
+        if ($targetRef -eq $TraceField) {
+            continue
         }
 
         if (-not $TargetFieldMetadata.ContainsKey($targetRef)) {

@@ -73,7 +73,7 @@ function Save-JsonFile {
         $Data
     )
 
-    $Data | ConvertTo-Json -Depth 100 | Set-Content -Path $Path -Encoding UTF8
+    ConvertTo-Json -InputObject $Data -Depth 100 | Set-Content -Path $Path -Encoding UTF8
 }
 
 try {
@@ -125,6 +125,14 @@ try {
         $batchItems = Get-AdoWorkItemsBatch -Context $sourceContext -Ids $batch -Expand 'All'
         foreach ($item in $batchItems) {
             if ($includeTypes.Count -gt 0 -and $includeTypes -notcontains [string] $item.fields.'System.WorkItemType') {
+                continue
+            }
+            $traceFieldName = [string] $config.traceability.sourceReferenceField
+            if ($item.fields.PSObject.Properties.Name -contains $traceFieldName -and -not [string]::IsNullOrWhiteSpace([string] $item.fields.$traceFieldName)) {
+                $sourceItemId = [int] $item.id
+                $warning = "Skipping source $sourceItemId because traceability field '$traceFieldName' is already populated."
+                $warnings.Add($warning)
+                Write-StructuredLog -Level 'WARN' -Operation 'selection' -Message $warning -SourceId $sourceItemId
                 continue
             }
             $sourceItems.Add($item)
@@ -198,7 +206,7 @@ try {
                 if ($config.dryRun.enabled) {
                     Write-StructuredLog -Level 'INFO' -Operation 'dry-run' -Message "Validate create for source $sourceId as type $targetType" -SourceId $sourceId
                     $validateResult = New-AdoWorkItem -Context $targetContext -WorkItemType $targetType -Patch $patch -ValidateOnly $true
-                    if ($validateResult -and $validateResult.id) {
+                    if ($validateResult -and $validateResult.PSObject.Properties.Name -contains 'id' -and $validateResult.id) {
                         $targetId = [int] $validateResult.id
                     }
                 }
@@ -278,7 +286,13 @@ try {
 
             $targetId = [int] $idMapping[[string] $sourceId]
             try {
-                $relationPatch = Build-RelationPatchFromSource -SourceWorkItem $sourceItem -TargetId $targetId -IdMapping $idMapping -RelationsConfig $config.relations -TargetOrgUrl $targetContext.OrgUrl -TargetProject $targetContext.Project -RelationOutcomes ([ref] $relationResults)
+                $targetItemForRelations = Get-AdoWorkItem -Context $targetContext -Id $targetId -Expand Relations
+                $existingTargetRelations = @()
+                if ($targetItemForRelations.PSObject.Properties.Name -contains 'relations') {
+                    $existingTargetRelations = @($targetItemForRelations.relations)
+                }
+
+                $relationPatch = Build-RelationPatchFromSource -SourceWorkItem $sourceItem -TargetId $targetId -IdMapping $idMapping -RelationsConfig $config.relations -ExistingTargetRelations $existingTargetRelations -TargetOrgUrl $targetContext.OrgUrl -TargetProject $targetContext.Project -RelationOutcomes ([ref] $relationResults)
 
                 $attachmentPatch = @()
                 if ($config.attachments.enabled) {

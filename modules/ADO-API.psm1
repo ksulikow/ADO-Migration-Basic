@@ -92,7 +92,12 @@ function Invoke-AdoRestMethod {
 
             $isTransient = $statusCode -eq 429 -or ($statusCode -ge 500 -and $statusCode -lt 600)
             if (-not $isTransient -or $attempt -ge $Context.MaxRetries) {
-                throw
+                $errorMessage = $_.Exception.Message
+                if ($_.ErrorDetails -and -not [string]::IsNullOrWhiteSpace($_.ErrorDetails.Message)) {
+                    $errorMessage = "$errorMessage $($_.ErrorDetails.Message)"
+                }
+
+                throw $errorMessage
             }
 
             $delay = Get-RetryDelayMs -Attempt $attempt
@@ -163,9 +168,9 @@ function Get-AdoWorkItemsBatch {
 
     $uri = "$($Context.OrgUrl)/_apis/wit/workitemsbatch?api-version=7.1"
     $body = @{
-        ids    = $Ids
-        fields = $Fields
-        expand = $Expand
+        ids       = $Ids
+        fields    = $Fields
+        '$expand' = $Expand
         errorPolicy = 'Omit'
     }
 
@@ -208,7 +213,8 @@ function New-AdoWorkItem {
         [bool] $ValidateOnly = $false
     )
 
-    $uri = "$($Context.OrgUrl)/$($Context.Project)/_apis/wit/workitems/`$$WorkItemType?api-version=7.1"
+    $encodedWorkItemType = [Uri]::EscapeDataString($WorkItemType)
+    $uri = '{0}/{1}/_apis/wit/workitems/${2}?api-version=7.1' -f $Context.OrgUrl, $Context.Project, $encodedWorkItemType
     if ($ValidateOnly) {
         $uri = "$uri&validateOnly=true"
     }
@@ -226,7 +232,7 @@ function Update-AdoWorkItem {
         [bool] $ValidateOnly = $false
     )
 
-    $uri = "$($Context.OrgUrl)/_apis/wit/workitems/$Id?api-version=7.1"
+    $uri = "$($Context.OrgUrl)/_apis/wit/workitems/${Id}?api-version=7.1"
     if ($ValidateOnly) {
         $uri = "$uri&validateOnly=true"
     }
@@ -243,7 +249,7 @@ function Get-AdoWorkItem {
         [ValidateSet('None', 'Relations', 'Fields', 'Links', 'All')] [string] $Expand = 'All'
     )
 
-    $uri = "$($Context.OrgUrl)/_apis/wit/workitems/$Id?`$expand=$Expand&api-version=7.1"
+    $uri = "$($Context.OrgUrl)/_apis/wit/workitems/${Id}?`$expand=$Expand&api-version=7.1"
     return Invoke-AdoRestMethod -Context $Context -Method GET -Uri $uri
 }
 

@@ -1,6 +1,36 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-ObjectPropertyValue {
+    param(
+        [AllowNull()] $Object,
+        [Parameter(Mandatory)] [string] $Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    if ($Object.PSObject.Properties.Name -contains $Name) {
+        return $Object.$Name
+    }
+
+    return $null
+}
+
+function Get-WorkItemRelations {
+    param(
+        [Parameter(Mandatory)] $WorkItem
+    )
+
+    $relations = Get-ObjectPropertyValue -Object $WorkItem -Name 'relations'
+    if (-not $relations) {
+        return @()
+    }
+
+    return @($relations)
+}
+
 function Get-LinkedWorkItemIdFromUrl {
     [CmdletBinding()]
     param([string] $Url)
@@ -15,6 +45,33 @@ function Get-LinkedWorkItemIdFromUrl {
     }
 
     return $null
+}
+
+function Test-RelationExists {
+    param(
+        [AllowNull()] $ExistingRelations,
+        [Parameter(Mandatory)] [string] $Rel,
+        [AllowNull()] [string] $Url,
+        [AllowNull()] [int] $LinkedWorkItemId
+    )
+
+    foreach ($existingRelation in @($ExistingRelations)) {
+        if ($existingRelation.rel -ne $Rel) {
+            continue
+        }
+
+        if ($null -ne $LinkedWorkItemId) {
+            $existingLinkedId = Get-LinkedWorkItemIdFromUrl -Url $existingRelation.url
+            if ($existingLinkedId -eq $LinkedWorkItemId) {
+                return $true
+            }
+        }
+        elseif ($existingRelation.url -eq $Url) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Resolve-RelationAction {
@@ -43,21 +100,25 @@ function Build-RelationPatchFromSource {
         [Parameter(Mandatory)] [int] $TargetId,
         [Parameter(Mandatory)] [hashtable] $IdMapping,
         [AllowNull()] $RelationsConfig,
+        [AllowNull()] $ExistingTargetRelations,
         [Parameter(Mandatory)] [string] $TargetOrgUrl,
         [Parameter(Mandatory)] [string] $TargetProject,
         [Parameter(Mandatory)] [ref] $RelationOutcomes
     )
 
     $patch = New-Object System.Collections.Generic.List[object]
+    $relations = @(Get-WorkItemRelations -WorkItem $SourceWorkItem)
 
-    if (-not $SourceWorkItem.relations) {
+    if ($relations.Count -eq 0) {
         return ,$patch
     }
 
-    foreach ($rel in $SourceWorkItem.relations) {
+    foreach ($rel in $relations) {
         if ($rel.rel -eq 'AttachedFile') {
             continue
         }
+
+        $attributes = Get-ObjectPropertyValue -Object $rel -Name 'attributes'
 
         if ($rel.rel -like 'ArtifactLink') {
             $RelationOutcomes.Value += [PSCustomObject]@{
@@ -72,15 +133,37 @@ function Build-RelationPatchFromSource {
 
         $linkedSourceId = Get-LinkedWorkItemIdFromUrl -Url $rel.url
         if ($null -ne $linkedSourceId -and $IdMapping.ContainsKey([string] $linkedSourceId)) {
+            if ($rel.rel -eq 'System.LinkTypes.Hierarchy-Reverse') {
+                $RelationOutcomes.Value += [PSCustomObject]@{
+                    sourceId = $SourceWorkItem.id
+                    targetId = $TargetId
+                    relation = $rel.rel
+                    action   = 'skip-reciprocal-hierarchy'
+                    details  = "Parent relation to cloned source $linkedSourceId is represented by the parent's child link."
+                }
+                continue
+            }
+
             $mappedTargetId = [int] $IdMapping[[string] $linkedSourceId]
             $newUrl = "$TargetOrgUrl/$TargetProject/_apis/wit/workItems/$mappedTargetId"
+            if (Test-RelationExists -ExistingRelations $ExistingTargetRelations -Rel $rel.rel -Url $newUrl -LinkedWorkItemId $mappedTargetId) {
+                $RelationOutcomes.Value += [PSCustomObject]@{
+                    sourceId = $SourceWorkItem.id
+                    targetId = $TargetId
+                    relation = $rel.rel
+                    action   = 'skip-existing'
+                    details  = "Relation to target $mappedTargetId already exists."
+                }
+                continue
+            }
+
             $patch.Add(@{
                 op = 'add'
                 path = '/relations/-'
                 value = @{
                     rel = $rel.rel
                     url = $newUrl
-                    attributes = $rel.attributes
+                    attributes = $attributes
                 }
             })
             $RelationOutcomes.Value += [PSCustomObject]@{
@@ -105,13 +188,24 @@ function Build-RelationPatchFromSource {
             continue
         }
 
+        if (Test-RelationExists -ExistingRelations $ExistingTargetRelations -Rel $rel.rel -Url $rel.url -LinkedWorkItemId $null) {
+            $RelationOutcomes.Value += [PSCustomObject]@{
+                sourceId = $SourceWorkItem.id
+                targetId = $TargetId
+                relation = $rel.rel
+                action   = 'skip-existing'
+                details  = 'Original relation URL already exists.'
+            }
+            continue
+        }
+
         $patch.Add(@{
             op = 'add'
             path = '/relations/-'
             value = @{
                 rel = $rel.rel
                 url = $rel.url
-                attributes = $rel.attributes
+                attributes = $attributes
             }
         })
 
@@ -139,18 +233,21 @@ function Copy-AttachmentsForWorkItem {
     )
 
     $attachmentPatch = New-Object System.Collections.Generic.List[object]
-    if (-not $SourceWorkItem.relations) {
+    $relations = @(Get-WorkItemRelations -WorkItem $SourceWorkItem)
+    if ($relations.Count -eq 0) {
         return ,$attachmentPatch
     }
 
-    foreach ($rel in $SourceWorkItem.relations) {
+    foreach ($rel in $relations) {
         if ($rel.rel -ne 'AttachedFile') {
             continue
         }
 
         $fileName = $null
-        if ($rel.attributes -and $rel.attributes.name) {
-            $fileName = [string] $rel.attributes.name
+        $attributes = Get-ObjectPropertyValue -Object $rel -Name 'attributes'
+        $attributeName = Get-ObjectPropertyValue -Object $attributes -Name 'name'
+        if ($attributeName) {
+            $fileName = [string] $attributeName
         }
         if ([string]::IsNullOrWhiteSpace($fileName)) {
             $fileName = "attachment-$($SourceWorkItem.id)-$([Guid]::NewGuid().ToString('N')).bin"
