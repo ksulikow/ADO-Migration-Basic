@@ -5,13 +5,16 @@ $script:SystemManagedFields = @(
     'System.Id',
     'System.Rev',
     'System.AreaId',
-    'System.AreaPath',
+    "System.AreaLevel1",
+    "System.AreaLevel2",
     'System.NodeName',
     'System.IterationId',
-    'System.IterationPath',
+    "System.IterationLevel1",
+    "System.IterationLevel2",
     'System.ExternalLinkCount',
     'System.HyperLinkCount',
     'System.AttachedFileCount',
+    'System.WorkItemType',
     'System.TeamProject',
     'System.Watermark',
     'System.AuthorizedDate',
@@ -20,7 +23,8 @@ $script:SystemManagedFields = @(
     'System.CreatedBy',
     'System.ChangedBy',
     'System.AuthorizedAs',
-    'Microsoft.VSTS.Common.StateChangeDate'
+    'Microsoft.VSTS.Common.StateChangeDate',
+    'System.PersonId'
 )
 
 function Resolve-TargetWorkItemType {
@@ -170,7 +174,7 @@ function Build-WorkItemFieldPatch {
         }
 
         $targetMeta = $TargetFieldMetadata[$targetRef]
-        if ($targetMeta.ReadOnly -or $targetMeta.IsIdentity) {
+        if ($targetMeta.ReadOnly -or ($targetMeta.IsIdentity -and $targetRef -ne 'System.AssignedTo')) {
             continue
         }
 
