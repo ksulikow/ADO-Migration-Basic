@@ -48,6 +48,13 @@
       "replaceTo": {
         "ADO-Migration-Test\\Iteration 1": "ADO-Migration-Test\\Iteration 2"
       }
+    },
+    "System.State": {
+      "targetField": "System.State",
+      "transform": "passthrough",
+      "replaceTo": {
+        "Active": "New"
+      }
     }
   },
   "fieldFallback": {
